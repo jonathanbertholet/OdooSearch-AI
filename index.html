@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chat Interface</title>
+    <style>
+        /* Modern styling for the chat interface */
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #1e40af;
+            --background-color: #f8fafc;
+            --border-color: #e2e8f0;
+            --text-color: #1e293b;
+            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+
+        #chat-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            padding: 24px;
+            margin-top: 20px;
+        }
+
+        #field-buttons {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        #field-buttons button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+
+        #field-buttons button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        #output {
+            margin: 20px 0;
+            padding: 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            min-height: 200px;
+            white-space: pre-wrap;
+            font-family: 'Fira Code', monospace;
+            background-color: #f8fafc;
+            line-height: 1.5;
+        }
+
+        #input-container {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        #user-input {
+            flex-grow: 1;
+            padding: 12px 16px;
+            font-size: 16px;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            transition: border-color 0.2s;
+            outline: none;
+        }
+
+        #user-input:focus {
+            border-color: var(--primary-color);
+        }
+
+        /* Loading animation */
+        .loading {
+            display: inline-block;
+            position: relative;
+            width: 80px;
+            height: 20px;
+        }
+
+        .loading div {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            animation: loading 1.2s linear infinite;
+        }
+
+        .loading div:nth-child(1) { left: 0; animation-delay: 0s; }
+        .loading div:nth-child(2) { left: 20px; animation-delay: 0.2s; }
+        .loading div:nth-child(3) { left: 40px; animation-delay: 0.4s; }
+
+        @keyframes loading {
+            0%, 100% { transform: scale(0.5); opacity: 0.2; }
+            50% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Add status indicator */
+        #status {
+            font-size: 14px;
+            color: #64748b;
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #22c55e;
+        }
+
+        /* Add field list display */
+        #current-fields {
+            margin-top: 12px;
+            padding: 12px;
+            background-color: #f1f5f9;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        #current-fields h3 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            color: #475569;
+        }
+
+        .field-tag {
+            display: inline-block;
+            padding: 4px 8px;
+            margin: 4px;
+            background-color: #e2e8f0;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        #copy-button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: background-color 0.2s;
+        }
+
+        #copy-button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        /* Optional: Add a success state */
+        #copy-button.success {
+            background-color: #22c55e;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="field-buttons">
+            <button onclick="loadFieldList('contacts')">Contacts Mode</button>
+            <button onclick="loadFieldList('sales')">Sales Mode</button>
+            <button onclick="loadFieldList('crm')">CRM Mode</button>
+        </div>
+        <div id="current-fields">
+            <h3>Available Fields:</h3>
+            <div id="field-tags"></div>
+        </div>
+        <div id="output"></div>
+        <button id="copy-button" onclick="copyToClipboard()">
+            Copy to Clipboard
+        </button>
+        <div id="input-container">
+            <input type="text" id="user-input" placeholder="Type your search query and press Enter...">
+        </div>
+        <div id="status">
+            <div class="status-dot"></div>
+            <span>Ready for queries</span>
+        </div>
+    </div>
+
+    <script type="module">
+        import config from './config.js';
+        
+        // Update the API_KEY constant to use the config
+        const API_KEY = config.GEMINI_API_KEY;
+        
+        // Update field lists to include descriptions
+        const fieldLists = {
+            contacts: {
+                complete_name: { description: "Full name of the contact", operators: ["=", "!=", "ilike", "not ilike"] },
+                phone: { description: "Phone number", operators: ["=", "!=", "ilike", "not ilike"] },
+                email: { description: "Email address", operators: ["=", "!=", "ilike", "not ilike"] },
+                city: { description: "City name", operators: ["=", "!=", "ilike", "not ilike"] },
+                vat: { description: "VAT number", operators: ["=", "!=", "ilike", "not ilike"] },
+                country_id: { description: "Country", operators: ["=", "!=", "in", "not in"] },
+                total_overdue: { description: "Total amount overdue", operators: ["=", "!=", ">", "<", ">=", "<="] },
+                total_due: { description: "Total amount due", operators: ["=", "!=", ">", "<", ">=", "<="] },
+                street: { description: "Street address", operators: ["=", "!=", "ilike", "not ilike"] },
+                zip: { description: "ZIP code", operators: ["=", "!=", "ilike", "not ilike"] },
+                state_id: { description: "State/Province", operators: ["=", "!=", "in", "not in"] }
+            },
+            sales: {
+                id: { description: "Unique identifier of the sale", operators: ["=", "!=", "in", "not in"] },
+                name: { description: "Sale reference/number", operators: ["=", "!=", "ilike", "not ilike"] },
+                create_date: { description: "Date when the sale was created", operators: ["=", "!=", ">", "<", ">=", "<="] },
+                expected_date: { description: "Expected delivery/completion date", operators: ["=", "!=", ">", "<", ">=", "<="] },
+                display_name: { description: "Display name of the sale", operators: ["=", "!=", "ilike", "not ilike"] },
+                amount_total: { description: "Total amount of the sale", operators: ["=", "!=", ">", "<", ">=", "<="] },
+                partner_id: { description: "Customer/partner reference", operators: ["=", "!=", "in", "not in"] }
+            },
+            crm: {
+                display_name: { description: "Company or opportunity name", operators: ["=", "!=", "ilike", "not ilike"] },
+                date_deadline: { description: "Deadline date for the opportunity", operators: ["=", "!=", ">", "<", ">=", "<="] },
+                create_date: { description: "Creation date of the opportunity", operators: ["=", "!=", ">", "<", ">=", "<="] },
+                name: { description: "Opportunity title", operators: ["=", "!=", "ilike", "not ilike"] },
+                partner_id: { description: "Related company/partner", operators: ["=", "!=", "in", "not in"] },
+                contact_name: { description: "Contact person name", operators: ["=", "!=", "ilike", "not ilike"] },
+                email_from: { description: "Contact email address", operators: ["=", "!=", "ilike", "not ilike"] },
+                phone: { description: "Contact phone number", operators: ["=", "!=", "ilike", "not ilike"] },
+                city: { description: "City location", operators: ["=", "!=", "ilike", "not ilike"] },
+                state_id: { description: "State/Province", operators: ["=", "!=", "in", "not in"] },
+                priority: { description: "Priority level of the opportunity, 1-3", operators: ["=", "!="] },
+                probability: { description: "Success probability percentage", operators: ["=", "!=", ">", "<", ">=", "<="] },
+                tag_ids: { description: "Associated tags/labels", operators: ["ilike", "not ilike"] }
+            }
+        };
+
+        // Add a variable to track current mode
+        let currentMode = 'contacts';  // Default mode
+
+        // Update loadFieldList to set current mode
+        function loadFieldList(listName) {
+            if (fieldLists[listName]) {
+                currentMode = listName;
+                currentFields = Object.keys(fieldLists[listName]);
+                const fieldTags = document.getElementById('field-tags');
+                fieldTags.innerHTML = currentFields
+                    .map(field => `<span class="field-tag" title="${fieldLists[listName][field].description}">${field}</span>`)
+                    .join('');
+                
+                document.querySelector('#status span').textContent = `${listName} mode active`;
+            }
+        }
+
+        // Show loading animation
+        function showLoading() {
+            output.innerHTML = '<div class="loading"><div></div><div></div><div></div></div>';
+            document.querySelector('#status span').textContent = 'Processing query...';
+            document.querySelector('.status-dot').style.backgroundColor = '#eab308';
+        }
+
+        // Show ready status
+        function showReady() {
+            document.querySelector('#status span').textContent = 'Ready for queries';
+            document.querySelector('.status-dot').style.backgroundColor = '#22c55e';
+        }
+
+        // Show error status
+        function showError() {
+            document.querySelector('#status span').textContent = 'Error occurred';
+            document.querySelector('.status-dot').style.backgroundColor = '#ef4444';
+        }
+
+        // Initialize with contacts fields
+        loadFieldList('contacts');
+
+        // Update system prompt to include descriptions
+        function getSystemPrompt() {
+            const currentList = fieldLists[currentMode];
+            return `Understand the user's query as a database search query and provide a response capturing the user's intent.
+
+Currently available fields and their compatible operators (${currentMode} mode):
+${Object.entries(currentList).map(([field, info]) => 
+    `- ${field}: ${info.description}\n  Compatible operators: ${info.operators.join(', ')}`
+).join('\n')}
+
+IMPORTANT: Fields such as zip only support exact matches or ilike/not ilike - even when the user requests amount x to amount y. same for other fields such as sales orders.
+IMPORTANT: When the user wants to match ANY of multiple conditions (using words like "or", "any of", "either"), set useOrLogic to true in the response.
+IMPORTANT: When the user wants to match ALL conditions (using words like "and", "both", "all of"), or when not specified, use AND logic (useOrLogic: false).
+IMPORTANT: Only use operators that are listed as compatible with each field. For example, numeric fields support comparison operators while tag fields only support "in" and "not in" operators.
+IMPORTANT: Only use fields from the current ${currentMode} mode listed above. Do not use fields from other modes.`;
+        }
+
+        // Update the formatSearchFromJSON function to handle both AND and OR conditions
+        function formatSearchFromJSON(data) {
+            // Add validation for data structure
+            if (!data || !data.fields || !Array.isArray(data.fields) || data.fields.length === 0) {
+                console.warn('Invalid or empty search data received:', data);
+                return '[]';
+            }
+
+            const allValues = data.fields;
+            let conditions = [];
+            
+            allValues.forEach(fieldObj => {
+                // Validate each field object
+                if (!fieldObj.field || !fieldObj.operator) {
+                    console.warn('Invalid field object:', fieldObj);
+                    return;
+                }
+
+                // Handle different value types properly
+                let formattedValue;
+                if (typeof fieldObj.value === 'string') {
+                    formattedValue = `"${fieldObj.value}"`;
+                } else if (fieldObj.value === null || fieldObj.value === undefined) {
+                    formattedValue = 'false';
+                } else {
+                    formattedValue = fieldObj.value;
+                }
+
+                conditions.push(`("${fieldObj.field}", "${fieldObj.operator}", ${formattedValue})`);
+            });
+            
+            // Only return [] if no valid conditions were created
+            if (conditions.length === 0) {
+                console.warn('No valid conditions generated from input');
+                return '[]';
+            }
+
+            // For single condition, return without operator
+            if (conditions.length === 1) return `[${conditions[0]}]`;
+            
+            // Check if the query should use OR logic based on keywords in the original query
+            const useOrLogic = data.useOrLogic === true;
+            
+            // For multiple conditions, join with either AND ("&") or OR ("|") operator
+            const operator = useOrLogic ? '"|"' : '"&"';
+            return `[${operator}, ${conditions.join(', ')}]`;
+        }
+
+        // Get DOM elements
+        const userInput = document.getElementById('user-input');
+        const output = document.getElementById('output');
+
+        // Function to find matching field from partial name
+        function findMatchingField(partialField) {
+            const currentList = fieldLists[currentMode];
+            
+            // Try exact match first
+            if (currentFields.includes(partialField)) {
+                return partialField;
+            }
+
+            // Try partial match
+            const match = currentFields.find(field => 
+                field.toLowerCase().includes(partialField.toLowerCase()) ||
+                currentList[field].toLowerCase().includes(partialField.toLowerCase())
+            );
+
+            return match;
+        }
+
+        // Add this function before the event listener
+        async function copyToClipboard() {
+            const output = document.getElementById('output');
+            const button = document.getElementById('copy-button');
+            
+            try {
+                // Copy the text
+                await navigator.clipboard.writeText(output.textContent);
+                
+                // Show success state
+                button.textContent = 'Copied!';
+                button.classList.add('success');
+                
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    button.textContent = 'Copy to Clipboard';
+                    button.classList.remove('success');
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to copy text:', err);
+                button.textContent = 'Failed to copy';
+                
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    button.textContent = 'Copy to Clipboard';
+                }, 2000);
+            }
+        }
+
+        // Update the event listener's error handling
+        userInput.addEventListener('keypress', async (e) => {
+            if (e.key === 'Enter' && userInput.value.trim()) {
+                const userMessage = userInput.value.trim();
+                userInput.value = '';
+                
+                try {
+                    showLoading();
+                    
+                    // Define the schema for structured output
+                    const requestBody = {
+                        contents: [{
+                            parts: [{ text: getSystemPrompt() + '\n\nUser: ' + userMessage }]
+                        }],
+                        generationConfig: {
+                            responseMimeType: "application/json",
+                            responseSchema: {
+                                type: "OBJECT",
+                                properties: {
+                                    fields: {
+                                        type: "ARRAY",
+                                        items: {
+                                            type: "OBJECT",
+                                            properties: {
+                                                field: {
+                                                    type: "STRING",
+                                                    description: "Field name to search on"
+                                                },
+                                                operator: {
+                                                    type: "STRING",
+                                                    description: "Search operator (>, <, =, etc)"
+                                                },
+                                                value: {
+                                                    type: "STRING",
+                                                    description: "Value to compare against"
+                                                }
+                                            },
+                                            required: ["field", "operator", "value"]
+                                        }
+                                    },
+                                    useOrLogic: {
+                                        type: "BOOLEAN",
+                                        description: "Set to true if conditions should be combined with OR logic instead of AND"
+                                    }
+                                },
+                                required: ["fields"]
+                            }
+                        }
+                    };
+
+                    // Use AI for query processing with schema
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.candidates && data.candidates[0].content.parts[0].text) {
+                        try {
+                            // Store the raw response for potential debugging
+                            const rawResponse = data.candidates[0].content.parts[0].text;
+                            
+                            // The response should already be valid JSON, no need to clean markdown
+                            const jsonResponse = JSON.parse(rawResponse);
+
+                            // Validate JSON structure
+                            if (!jsonResponse.fields) {
+                                console.error('Missing fields in response:', jsonResponse);
+                                output.textContent = 'Error: Invalid response structure\n\nRaw response:\n' + rawResponse;
+                                showError();
+                                return;
+                            }
+
+                            const formattedOutput = formatSearchFromJSON(jsonResponse);
+                            
+                            // If empty result is returned, show the raw response
+                            if (formattedOutput === '[]') {
+                                console.warn('Empty result generated for input:', userMessage);
+                                output.textContent = 'Parser returned empty result. Raw response:\n\n' + rawResponse;
+                            } else {
+                                output.textContent = formattedOutput;
+                            }
+                            
+                        } catch (error) {
+                            console.error('Processing error:', error);
+                            output.textContent = 'Error processing response: ' + error.message + '\n\nRaw response:\n' + 
+                                data.candidates[0].content.parts[0].text;
+                            showError();
+                        }
+                    } else {
+                        console.error('Invalid API response:', data);
+                        output.textContent = 'Error: Invalid API response';
+                        showError();
+                    }
+                } catch (error) {
+                    console.error('API error:', error);
+                    output.textContent = 'Error: ' + error.message;
+                    showError();
+                }
+                showReady();
+            }
+        });
+    </script>
+</body>
+</html>
