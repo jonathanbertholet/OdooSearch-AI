@@ -1,5 +1,7 @@
 # AI Chat Interface
 
+Mostly just experimenting with NLP search for Odoo records in individual apps. 
+
 ## Setup
 
 1. Clone the repository
